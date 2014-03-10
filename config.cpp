@@ -21,13 +21,39 @@ class uns_radio
 		MaxDistance = 900;
 		sleepTimeGround[] = {10,30}; // {min,max} in seconds
 		sleepTimeAir[] = {30,60}; // {min,max} in seconds
-		sleepTimeGeneric[] = {0,1}; // {min,max} in seconds
-		NumSounds[] ={
-			{48,0,0}, // [ EAST(ground,air,generic)
-			{17,14,85},  // [ WEST(ground,air,generic)
-			{0,0,0},  // [ RESISTANCE(ground,air,generic)
-			{0,0,0}  // [ CIVILIAN(ground,air,generic)
+		sleepTimeGeneric[] = {0,1}; // {min,max} in seconds	
+		OnlyOccupied=1; // only play sounds on vehicles with driver.
+		MaxSounds=13; // max number of sounds that can be played at the same time, -1 old behaviour aka unlimited
+		
+		class MaxSoundsArr {
+			ground=5; //max number of simultaneus ground radio playing
+			air=5; //max number of simultaneus air radio playing
+			generic=3; //max number of simultaneus generic radio playing
+		}
+		
+		class NumSounds{ //number of sounds of each class
+			class EAST {
+				ground=48; //east ground channel
+				air=0;
+				generic=0;
+			}
+			class WEST {
+				ground=17; 	//west ground channel
+				air=14;		//west air channel
+				generic=85; //west generic radio channel
+			}
+			class RESISTANCE {
+				ground=0;
+				air=0;
+				generic=0;
+			}
+			class CIVILIAN {
+				ground=0;
+				air=0;
+				generic=0;
+			}
 		};
+		
 	};
 };
 

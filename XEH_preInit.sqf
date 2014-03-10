@@ -1,6 +1,16 @@
 
 Uns_radio_MaxDistance=getNumber (configFile >> "uns_radio" >> "config" >> "MaxDistance");
 Uns_radio_numSound=getArray (configFile >> "uns_radio" >> "config" >> "NumSounds"); //[ EAST , WEST , RESISTANCE , CIVILIAN];
+_tmparray=[[],[],[],[]];
+_tmparray2=[];
+{
+	_tmparray2=[(getNumber (configFile >> "uns_radio" >> "config" >> _x >> "ground")),
+	(getNumber (configFile >> "uns_radio" >> "config" >> _x >> "air")),
+	(getNumber (configFile >> "uns_radio" >> "config" >> _x >> "generic"))];
+	_tmparray set [_forEachIndex,_tmparray2];
+} foreach ["EAST", "WEST", "RESISTANCE", "CIVILIAN"];
+Uns_radio_numSound=_tmparray;
+
 Uns_radio_sleep_delays=[getArray (configFile >> "uns_radio" >> "config" >> "sleepTimeGround"),
 	getArray (configFile >> "uns_radio" >> "config" >> "sleepTimeAir"),
 	getArray (configFile >> "uns_radio" >> "config" >> "sleepTimeGeneric")];
@@ -14,34 +24,68 @@ Uns_radio_sides=[east,west,resistance,civilian];
 uns_radio_allair=[];
 uns_radio_allground=[];
 uns_radio_allgeneric=[];
+uns_radio_Logics=[];
 uns_radio_LastChanel=3;
 uns_radio_selectedChannel=1;
 uns_radio_manualShwon=false;
 uns_radio_calltypes=["AIREXTRAC", "RESUPPLY", "CAS", "MORTAR", "ARTY"];
 
+uns_radio_MaxSounds=(getNumber (configFile >> "uns_radio" >> "config" >> "MaxSounds"));
+uns_radio_MaxSoundsArr=[(getNumber (configFile >> "uns_radio" >> "config" >> "MaxSoundsArr" >> "ground")),
+						(getNumber (configFile >> "uns_radio" >> "config" >> "MaxSoundsArr" >> "air")),
+						(getNumber (configFile >> "uns_radio" >> "config" >> "MaxSoundsArr" >> "generic"))];
+uns_radio_OnlyOccupied=(getNumber (configFile >> "uns_radio" >> "config" >> "OnlyOccupied")) ==1;
 
-Uns_radio_FNC_Play = {
-	//Plays a sound on all the sources near to the player on the chanel
-	private["_chanel", "_Soundindex", "_chanelSide","_SoundName","_SpecialSound"];
-	_chanel=_this select 0;
-	_chanelSide=_this select 1;
-	_Soundindex=_this select 2;
-	_SpecialSound=if (count _this > 3) then {_this select 3} else {false};
-	
-	
-	if (isDedicated) exitwith{}; // No sounds on dedi :)
 
-	if (_SpecialSound && _chanel==0) then {call Uns_radio_FNC_ResetUnitEmiters};
-	
-	if (time >Uns_radio_timeLastCheck) then {call Uns_radio_FNC_BuildEmisorList};
-	if (!_SpecialSound) then {
-		_SoundName=format["Uns_radio_%1_CHAN%2_TRACK%3",(Uns_radio_sides select _chanelSide),_chanel,_Soundindex];
-		(uns_radio_lastsounds select _chanelSide) set [_chanel,_Soundindex];
-	}else {
-		_SoundName=format["Uns_radio_%1_ANSWER_%2",(Uns_radio_sides select _chanelSide),(uns_radio_calltypes select _Soundindex)];
+if (uns_radio_MaxSounds < 0) then {
+	Uns_radio_FNC_Play = {
+		//Plays a sound on all the sources near to the player on the chanel
+		private["_chanel", "_Soundindex", "_chanelSide","_SoundName","_SpecialSound"];
+		_chanel=_this select 0;
+		_chanelSide=_this select 1;
+		_Soundindex=_this select 2;
+		_SpecialSound=if (count _this > 3) then {_this select 3} else {false};
+		
+		
+		if (isDedicated) exitwith{}; // No sounds on dedi :)
+
+		if (_SpecialSound && _chanel==0) then {call Uns_radio_FNC_ResetUnitEmiters};
+		
+		if (time >Uns_radio_timeLastCheck) then {call Uns_radio_FNC_BuildEmisorList};
+		if (!_SpecialSound) then {
+			_SoundName=format["Uns_radio_%1_CHAN%2_TRACK%3",(Uns_radio_sides select _chanelSide),_chanel,_Soundindex];
+			(uns_radio_lastsounds select _chanelSide) set [_chanel,_Soundindex];
+		}else {
+			_SoundName=format["Uns_radio_%1_ANSWER_%2",(Uns_radio_sides select _chanelSide),(uns_radio_calltypes select _Soundindex)];
+		};
+		{if ((_x distance player) < Uns_radio_MaxDistance) then {_x say3d _SoundName}} foreach ((uns_radio_emisor select _chanelSide) select _chanel);
+		
 	};
-	{if ((_x distance player) < Uns_radio_MaxDistance) then {_x say3d _SoundName}} foreach ((uns_radio_emisor select _chanelSide) select _chanel);
-	
+} else { 
+	//Alternate play version with limited number of radio sounds
+	Uns_radio_FNC_Play = {
+		//Plays a sound on all the sources near to the player on the chanel
+		private["_chanel", "_Soundindex", "_chanelSide","_SoundName","_SpecialSound"];
+		_chanel=_this select 0;
+		_chanelSide=_this select 1;
+		_Soundindex=_this select 2;
+		_SpecialSound=if (count _this > 3) then {_this select 3} else {false};
+		
+		
+		if (isDedicated) exitwith{}; // No sounds on dedi :)
+
+		if (_SpecialSound && _chanel==0) then {call Uns_radio_FNC_ResetUnitEmiters};
+		
+		if (time >Uns_radio_timeLastCheck) then {call Uns_radio_FNC_Update_logics};
+		if (!_SpecialSound) then {
+			_SoundName=format["Uns_radio_%1_CHAN%2_TRACK%3",(Uns_radio_sides select _chanelSide),_chanel,_Soundindex];
+			(uns_radio_lastsounds select _chanelSide) set [_chanel,_Soundindex];
+		}else {
+			_SoundName=format["Uns_radio_%1_ANSWER_%2",(Uns_radio_sides select _chanelSide),(uns_radio_calltypes select _Soundindex)];
+		};
+		{if ((_x distance player) < Uns_radio_MaxDistance) then {_x say3d _SoundName}} foreach ((uns_radio_emisor select _chanelSide) select _chanel);
+		
+	};
 };
 
 Uns_radio_FNC_MainRadioLoop = {
@@ -118,6 +162,149 @@ Uns_radio_FNC_getSideNum = {
 		case resistance: {2}; 
 		case civilian: {3}; 
 	};
+};
+
+Uns_radio_FNC_Update_logics={
+	private["_list","_chanel", "_Soundindex", "_chanelSide","_SoundName","_eastTransG","_eastTransA",
+	"_westTransG","_westTransA","_resisTransG","_resisTransA","_civTransG","_civTransA","_sideR",
+	"_eastTransGE","_westTransGE","_resisTransGE","_civTransGE","_LocalLogic"];
+	_totalSourcesGroud=0;
+	_totalSourcesAir=0;
+	_totalSourcesGeneric=0;
+	
+	_eastTransG=[];_westTransG=[]; _eastTransA=[];_westTransA=[]; _eastTransGE=[];_westTransGE=[];
+	_resisTransG=[];_civTransG=[]; _resisTransA=[];_civTransA=[]; _resisTransGE=[];_civTransGE=[];
+	
+	
+	_list = (position player) nearEntities 150;
+	call Uns_radio_FNC_unassigLogics;
+	{
+		if (_x isKindOf "CAManBase") then {
+			if (_x call uns_radio_FNC_HasRadio) then {
+				if (isnil {_x getvariable "uns_radio_locLogic"}) then {
+					/*_LocalLogic = "Logic" createVehicleLocal (getPos _x);
+					_x setVariable ["uns_radio_locLogic", _LocalLogic];
+					[_x,_LocalLogic] spawn Uns_radio_FNC_UnitRadioCheck;*/
+				};
+
+				switch (side (group _x)) do {
+					case west : {_westTransG=_westTransG+[_x]};
+					case east : {_eastTransG=_eastTransG+[_x]};
+					case Resistance : {_resisTransG=_resisTransG+[_x]};
+					case Civilian : {_civTransG=_civTransG+[_x]};
+					default {};                          
+				};
+				_totalSourcesGroud=_totalSourcesGroud+1;
+			};
+		};
+	
+	
+	//ground vehicles with radio. TODO no need to constant check
+		if (_x isKindOf "LandVehicle") then {
+			if (! isnull (driver _x)) then
+			{
+				_sideR=side (group (driver _x));
+			} else{
+				_sideR=Uns_radio_sides select (getNumber (configFile >> "CfgVehicles" >> typeOf _x >> "side"));
+			};
+			
+			if (!uns_radio_OnlyOccupied || ! isnull (driver _x)) then {
+				switch _sideR do {
+					case west : {_westTransG=_westTransG+[_x]};
+					case east : {_eastTransG=_eastTransG+[_x]};
+					case Resistance : {_resisTransG=_resisTransG+[_x]};
+					case Civilian : {_civTransG=_civTransG+[_x]};
+					default {};                          
+				};
+				_totalSourcesGroud=_totalSourcesGroud+1;
+			};
+		};
+		
+		//air vehicles with radio. TODO no need to constant check
+
+		if (_x isKindOf "LandVehicle") then {
+			if (! isnull (driver _x)) then
+			{
+				_sideR=side (group  driver _x);
+			} else{
+				_sideR=Uns_radio_sides select (getNumber (configFile >> "CfgVehicles" >> typeOf _x >> "side"));
+			};
+			
+			if (!uns_radio_OnlyOccupied || ! isnull (driver _x)) then {
+				switch _sideR do {
+					case west : {_westTransA=_westTransA+[_x]};
+					case east : {_eastTransA=_eastTransA+[_x]};
+					case Resistance : {_resisTransA=_resisTransA+[_x]};
+					case Civilian : {_civTransA=_civTransA+[_x]};
+					default {};                          
+				};
+				_totalSourcesAir=_totalSourcesAir+1;
+			};
+		};
+
+	
+		//Generic objects with radio. TODO no need to constant check
+	
+		if (isNumber (configFile>>"CfgVehicles" >> typeOf _x >> "Uns_has_Radio")) then
+		{
+			_sideR=Uns_radio_sides select (getNumber (configFile>>"CfgVehicles" >> typeOf _x >> "Uns_has_Radio"));
+		} else{
+			//_sideR=getNumber (configFile>>"CfgVehicles" >> typeOf _vehicle >> "Uns_has_Radio") // read from config
+			_sideR=sideEnemy; //Not recogniced 
+		};
+		
+		switch _sideR do {
+			case west : {_westTransGE=_westTransGE+[_x]};
+			case east : {_eastTransGE=_eastTransGE+[_x]};
+			case Resistance : {_resisTransGE=_resisTransGE+[_x]};
+			case Civilian : {_civTransGE=_civTransGE+[_x]};
+			default {};                          
+		};	
+		_totalSourcesGeneric_totalSourcesGeneric+1;
+	} foreach _list;
+	
+	uns_radio_emisor=[[_eastTransG,_eastTransA,_eastTransGE],[_westTransG,_westTransA,_westTransGE],[_resisTransG,_resisTransA,_resisTransGE],[_civTransG,_civTransA,_civTransGE]];
+	uns_radio_totalSources=[_totalSourcesGroud,_totalSourcesAir,_totalSourcesGeneric];
+}
+
+Uns_radio_FNC_unassigLogics={
+	{
+		_x setpos [-1000,-1000,-1000];
+	} foreach uns_radio_Logics;
+}
+
+Uns_radio_FNC_assingLogics={
+	_totalRadios=uns_radio_MaxSounds;
+	_totalRadiosGround= uns_radio_MaxSoundsArr select 0;
+	_totalRadiosAir= uns_radio_MaxSoundsArr select 1;
+	_totalRadiosGeneric= uns_radio_MaxSoundsArr select 2;
+	
+	_totalSourcesGround= uns_radio_totalSources select 0;
+	_totalSourcesAir= uns_radio_totalSources select 0;
+	_totalSourcesGeneric= uns_radio_totalSources select 0;
+	_totalSources=_totalSourcesGround+_totalSourcesAir+_totalSourcesGeneric;
+	
+	if (_totalSources >_totalRadios) then { //not all sources will have sound
+	};
+	
+	if (_totalSourcesGround >_totalRadiosGround) then { //not all ground channel radios will be played
+	};
+	if (_totalSourcesAir >_totalRadiosAir) then { //not all air channel radios will be played
+	};
+	if (_totalSourcesGeneric >_totalRadiosGeneric) then { /not all generic channel radios will be played
+	};
+
+	{
+		
+	
+	} foreach uns_radio_emisor;
+
+}
+
+uns_radio_FNC_getRadioByType={
+	{
+		i
+	} foreach uns_radio_Logics;
 };
 
 Uns_radio_FNC_ResetUnitEmiters = {
