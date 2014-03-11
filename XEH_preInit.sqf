@@ -1,6 +1,6 @@
 
 Uns_radio_MaxDistance=getNumber (configFile >> "uns_radio" >> "config" >> "MaxDistance");
-Uns_radio_numSound=getArray (configFile >> "uns_radio" >> "config" >> "NumSounds"); //[ EAST , WEST , RESISTANCE , CIVILIAN];
+//Uns_radio_numSound=getArray (configFile >> "uns_radio" >> "config" >> "NumSounds"); //[ EAST , WEST , RESISTANCE , CIVILIAN];
 _tmparray=[[],[],[],[]];
 _tmparray2=[];
 {
@@ -37,56 +37,6 @@ uns_radio_MaxSoundsArr=[(getNumber (configFile >> "uns_radio" >> "config" >> "Ma
 uns_radio_OnlyOccupied=(getNumber (configFile >> "uns_radio" >> "config" >> "OnlyOccupied")) ==1;
 
 
-if (uns_radio_MaxSounds < 0) then {
-	Uns_radio_FNC_Play = {
-		//Plays a sound on all the sources near to the player on the chanel
-		private["_chanel", "_Soundindex", "_chanelSide","_SoundName","_SpecialSound"];
-		_chanel=_this select 0;
-		_chanelSide=_this select 1;
-		_Soundindex=_this select 2;
-		_SpecialSound=if (count _this > 3) then {_this select 3} else {false};
-		
-		
-		if (isDedicated) exitwith{}; // No sounds on dedi :)
-
-		if (_SpecialSound && _chanel==0) then {call Uns_radio_FNC_ResetUnitEmiters};
-		
-		if (time >Uns_radio_timeLastCheck) then {call Uns_radio_FNC_BuildEmisorList};
-		if (!_SpecialSound) then {
-			_SoundName=format["Uns_radio_%1_CHAN%2_TRACK%3",(Uns_radio_sides select _chanelSide),_chanel,_Soundindex];
-			(uns_radio_lastsounds select _chanelSide) set [_chanel,_Soundindex];
-		}else {
-			_SoundName=format["Uns_radio_%1_ANSWER_%2",(Uns_radio_sides select _chanelSide),(uns_radio_calltypes select _Soundindex)];
-		};
-		{if ((_x distance player) < Uns_radio_MaxDistance) then {_x say3d _SoundName}} foreach ((uns_radio_emisor select _chanelSide) select _chanel);
-		
-	};
-} else { 
-	//Alternate play version with limited number of radio sounds
-	Uns_radio_FNC_Play = {
-		//Plays a sound on all the sources near to the player on the chanel
-		private["_chanel", "_Soundindex", "_chanelSide","_SoundName","_SpecialSound"];
-		_chanel=_this select 0;
-		_chanelSide=_this select 1;
-		_Soundindex=_this select 2;
-		_SpecialSound=if (count _this > 3) then {_this select 3} else {false};
-		
-		
-		if (isDedicated) exitwith{}; // No sounds on dedi :)
-
-		if (_SpecialSound && _chanel==0) then {call Uns_radio_FNC_ResetUnitEmiters};
-		
-		if (time >Uns_radio_timeLastCheck) then {call Uns_radio_FNC_Update_logics};
-		if (!_SpecialSound) then {
-			_SoundName=format["Uns_radio_%1_CHAN%2_TRACK%3",(Uns_radio_sides select _chanelSide),_chanel,_Soundindex];
-			(uns_radio_lastsounds select _chanelSide) set [_chanel,_Soundindex];
-		}else {
-			_SoundName=format["Uns_radio_%1_ANSWER_%2",(Uns_radio_sides select _chanelSide),(uns_radio_calltypes select _Soundindex)];
-		};
-		{if ((_x distance player) < Uns_radio_MaxDistance) then {_x say3d _SoundName}} foreach ((uns_radio_emisor select _chanelSide) select _chanel);
-		
-	};
-};
 
 Uns_radio_FNC_MainRadioLoop = {
 	private["_chanel", "_Soundindex", "_chanelSide","_duracion","_NextSound","_MinSleep","_MaxSleep"];
@@ -172,21 +122,18 @@ Uns_radio_FNC_Update_logics={
 	_totalSourcesAir=0;
 	_totalSourcesGeneric=0;
 	
+	uns_radio_emisor=[[[],[]],[[],[]],[[],[]],[[],[]]];
 	_eastTransG=[];_westTransG=[]; _eastTransA=[];_westTransA=[]; _eastTransGE=[];_westTransGE=[];
 	_resisTransG=[];_civTransG=[]; _resisTransA=[];_civTransA=[]; _resisTransGE=[];_civTransGE=[];
 	
-	
+	Uns_radio_timeLastCheck=time+10;// only refresh this each 10 seconds and needed -->long loop :)
 	_list = (position player) nearEntities 150;
-	call Uns_radio_FNC_unassigLogics;
+	call Uns_radio_FNC_unassigAllLogics;
+	
 	{
 		if (_x isKindOf "CAManBase") then {
 			if (_x call uns_radio_FNC_HasRadio) then {
-				if (isnil {_x getvariable "uns_radio_locLogic"}) then {
-					/*_LocalLogic = "Logic" createVehicleLocal (getPos _x);
-					_x setVariable ["uns_radio_locLogic", _LocalLogic];
-					[_x,_LocalLogic] spawn Uns_radio_FNC_UnitRadioCheck;*/
-				};
-
+				
 				switch (side (group _x)) do {
 					case west : {_westTransG=_westTransG+[_x]};
 					case east : {_eastTransG=_eastTransG+[_x]};
@@ -263,15 +210,68 @@ Uns_radio_FNC_Update_logics={
 		_totalSourcesGeneric_totalSourcesGeneric+1;
 	} foreach _list;
 	
-	uns_radio_emisor=[[_eastTransG,_eastTransA,_eastTransGE],[_westTransG,_westTransA,_westTransGE],[_resisTransG,_resisTransA,_resisTransGE],[_civTransG,_civTransA,_civTransGE]];
+	_params=[[_eastTransG,_eastTransA,_eastTransGE],[_westTransG,_westTransA,_westTransGE],[_resisTransG,_resisTransA,_resisTransGE],[_civTransG,_civTransA,_civTransGE]];
 	uns_radio_totalSources=[_totalSourcesGroud,_totalSourcesAir,_totalSourcesGeneric];
+	_params call Uns_radio_FNC_assingLogics;
 }
 
-Uns_radio_FNC_unassigLogics={
+Uns_radio_FNC_unassigLogic={
+	_logic= _this;
+	if (!isnil {_logic getVariable "uns_radio_unitatt"}) then {
+		_unit=_logic getVariable "uns_radio_unitatt";
+		if (!isnil "_unit") then {
+			if (!isnull _unit) then {
+				_unit setvariable ["uns_radio_locLogic",nil];
+			};
+		};
+	};
+	
+	detach _logic;
+	_logic setvariable ["uns_radio_assigned",nil];
+	_logic setpos [-1000,-1000,-1000];
+};
+
+Uns_radio_FNC_attachLogic={
+	_logic= _this select 0;
+	_emisor= _this select 1;
+
+
+	_emisor setvariable ["uns_radio_locLogic",_logic];
+	
+	if (_emisor isKindOf "CAManBase") then {[_emisor,_LocalLogic] spawn Uns_radio_FNC_UnitRadioCheck;};
+	
+	_logic setvariable ["uns_radio_unitatt",_emisor];
+
+	
+	_logic setvariable ["uns_radio_assigned",true];
+	_logic attachTo [vehicle _emisor,[0,0,0.5]];
+	
+	_logic call uns_radio_fnc_addemisor;
+	
+};
+
+Uns_radio_FNC_unassigAllLogics={
 	{
-		_x setpos [-1000,-1000,-1000];
+		_x call Uns_radio_FNC_unassigLogic;
 	} foreach uns_radio_Logics;
 }
+
+
+
+
+uns_radio_fnc_addemisor= {
+	_logic= _this;
+	_radio_side = _logic gsetvariable "uns_radio_side";
+	_radio_channel = _logic getvariable "uns_radio_channel";
+	if (!isnil "_radio_side" && !isnil "_radio_channel") then {
+		_tmparray1=uns_radio_emisor select _radio_side;
+		_tmparray2= (uns_radio_emisor select _radio_side) select _radio_channel;
+		_tmparray2= _tmparray2 + [_logic];
+		
+		_tmparray1 set [_radio_channel, _tmparray2];
+		uns_radio_emisor set [_radio_side,_tmparray1];
+	};
+};
 
 Uns_radio_FNC_assingLogics={
 	_totalRadios=uns_radio_MaxSounds;
@@ -284,23 +284,239 @@ Uns_radio_FNC_assingLogics={
 	_totalSourcesGeneric= uns_radio_totalSources select 0;
 	_totalSources=_totalSourcesGround+_totalSourcesAir+_totalSourcesGeneric;
 	
-	if (_totalSources >_totalRadios) then { //not all sources will have sound
-	};
+	//TODO: shitty implementation needs clean up
+		//west:
+			//ground
+			_westTransG=(_this select 1) select 0;
+			//Air
+			_westTransA=(_this select 1) select 1;
+			//Generic
+			_westTransGE=(_this select 1) select 2;
+		//east:
+			//ground
+			_eastTransG=(_this select 0) select 0;
+			//Air
+			_eastTransA=(_this select 0) select 1;
+			//Generic
+			_eastTransGE=(_this select 0) select 2;
+		//reistance:
+			//ground
+			_resisTransG=(_this select 2) select 0;
+			//Air
+			_resisTransA=(_this select 2) select 1;
+			//Generic
+			_resisTransGE=(_this select 2) select 2;
+		//civil:
+			//ground
+			_civTransG=(_this select 3) select 0;
+			//Air
+			_civTransA=(_this select 3) select 1;
+			//Generic
+			_civTransGE=(_this select 3) select 2;
 	
-	if (_totalSourcesGround >_totalRadiosGround) then { //not all ground channel radios will be played
-	};
-	if (_totalSourcesAir >_totalRadiosAir) then { //not all air channel radios will be played
-	};
-	if (_totalSourcesGeneric >_totalRadiosGeneric) then { /not all generic channel radios will be played
-	};
-
-	{
+	uns_Radio_asingLogics=[];
+	_lastTotalRadios=0;
+	//distribute all the max radio sounds throught the total sources.
+	while {_totalSources >0 && _totalRadios >0 && _lastTotalRadios !=_totalRadios } do {
+		_lastTotalRadios=_totalRadios;
 		
-	
-	} foreach uns_radio_emisor;
+		//ground:
+		if (_totalRadiosGround>0) then {
+			if (count _westTransG > 0 && _totalRadiosGround>0) then {
+				_totalRadios=_totalRadios-1;
+				_totalRadiosGround=_totalRadiosGround-1;
+				_totalSources=_totalSources-1;
+				_emisor= _westTransG select 0;
+				[_emisor,1, 0] call uns_radio_FNC_asingLogicFirstPass;
+				_westTransG=_westTransG- [_emisor];
+			};
+			if (count _eastTransG > 0 && _totalRadiosGround>0) then {
+				_totalRadios=_totalRadios-1;
+				_totalRadiosGround=_totalRadiosGround-1;
+				_totalSources=_totalSources-1;
+				_emisor= _eastTransG select 0;
+				[_emisor,0, 0] call uns_radio_FNC_asingLogicFirstPass;
+				_eastTransG=_eastTransG- [_emisor];
+			};
+			if (count _resisTransG > 0 && _totalRadiosGround>0) then {
+				_totalRadios=_totalRadios-1;
+				_totalRadiosGround=_totalRadiosGround-1;
+				_emisor= _resisTransG select 0;
+				[_emisor,2, 0] call uns_radio_FNC_asingLogicFirstPass;
+				_resisTransG=_resisTransG- [_emisor];
+			};
+			if (count _civTransG > 0 && _totalRadiosGround>0) then {
+				_totalRadios=_totalRadios-1;
+				_totalRadiosGround=_totalRadiosGround-1;
+				_totalSources=_totalSources-1;
+				_emisor= _civTransG select 0;
+				[_emisor,3, 0] call uns_radio_FNC_asingLogicFirstPass;
+				_civTransG=_civTransG- [_emisor];
+			};
+		};
+		
+		//air
+		if (_totalRadiosAir>0) then {
+			if (count _westTransA > 0 && _totalRadiosAir>0) then {
+				_totalRadios=_totalRadios-1;
+				_totalRadiosAir=_totalRadiosAir-1;
+				_totalSources=_totalSources-1;
+				_emisor= _westTransA select 0;
+				[_emisor,1, 1] call uns_radio_FNC_asingLogicFirstPass;
+				_westTransA=_westTransA- [_emisor];
+			};
+			if (count _eastTransA > 0 && _totalRadiosAir>0) then {
+				_totalRadios=_totalRadios-1;
+				_totalRadiosAir=_totalRadiosAir-1;
+				_totalSources=_totalSources-1;
+				_emisor= _eastTransA select 0;
+				[_emisor,0, 1] call uns_radio_FNC_asingLogicFirstPass;
+				_eastTransA=_eastTransA- [_emisor];
+			};
+			if (count _resisTransA > 0 && _totalRadiosAir>0) then {
+				_totalRadios=_totalRadios-1;
+				_totalRadiosAir=_totalRadiosAir-1;
+				_totalSources=_totalSources-1;
+				_emisor= _resisTransA select 0;
+				[_emisor,3, 1] call uns_radio_FNC_asingLogicFirstPass;
+				_resisTransA=_resisTransA- [_emisor];
+			};
+			if (count _civTransA > 0 && _totalRadiosAir>0) then {
+				_totalRadios=_totalRadios-1;
+				_totalRadiosAir=_totalRadiosAir-1;
+				_totalSources=_totalSources-1;
+				_emisor= _civTransA select 0;
+				[_emisor,4, 1] call uns_radio_FNC_asingLogicFirstPass;
+				_civTransA=_civTransA- [_emisor];
+			};
+		};
+		
 
+		//generic
+		if (_totalRadiosGeneric>0) then {
+			if (count _westTransGE > 0 && _totalRadiosGeneric>0) then {
+				_totalRadios=_totalRadios-1;
+				_totalRadiosGeneric=_totalRadiosGeneric-1;
+				_totalSources=_totalSources-1;
+				_emisor= _westTransGE select 0;
+				[_emisor,1, 2] call uns_radio_FNC_asingLogicFirstPass;
+				_westTransGE=_westTransGE- [_emisor];
+			};
+			if (count _eastTransGE > 0 && _totalRadiosGeneric>0) then {
+				_totalRadios=_totalRadios-1;
+				_totalRadiosGeneric=_totalRadiosGeneric-1;
+				_totalSources=_totalSources-1;
+				_emisor= _eastTransGE select 0;
+				[_emisor,0, 2] call uns_radio_FNC_asingLogicFirstPass;
+				_eastTransGE=_eastTransGE- [_emisor];
+			};
+			if (count _resisTransGE > 0 && _totalRadiosGeneric>0) then {
+				_totalRadios=_totalRadios-1;
+				_totalRadiosGeneric=_totalRadiosGeneric-1;
+				_totalSources=_totalSources-1;
+				_emisor= _resisTransGE select 0;
+				[_emisor,3, 2] call uns_radio_FNC_asingLogicFirstPass;
+				_resisTransGE=_resisTransGE- [_emisor];
+			};
+			if (count _civTransGE > 0 && _totalRadiosGeneric>0) then {
+				_totalRadios=_totalRadios-1;
+				_totalRadiosGeneric=_totalRadiosGeneric-1;
+				_totalSources=_totalSources-1;
+				_emisor= _civTransGE select 0;
+				[_emisor,4, 2] call uns_radio_FNC_asingLogicFirstPass;
+				_civTransGE=_civTransGE- [_emisor];
+			};
+		};
+		
+	};
+	
+	call uns_radio_FNC_asingLogicSecondPass;
 }
 
+//first pass, reuse old logics
+uns_radio_FNC_asingLogicFirstPass={
+	private["_emisor","_radio_side","_radio_channel","_found"];
+	_emisor=_this select 0;
+	_radio_side=_this select 1;
+	_radio_channel=_this select 2;
+	_found=false;
+	
+	{
+		if (isnil {_x getvariable "uns_radio_assigned"} && _radio_side==(_x getvariable ["uns_radio_side",-1]) && _radio_channel==(_x getvariable ["uns_radio_channel",-1]) ) exitwith {
+			[_x,_emisor] call Uns_radio_FNC_attachLogic;
+			_found=true;
+		};
+	} foreach uns_radio_Logics;
+	
+	if (!_found) then {
+		uns_Radio_asingLogics set [count uns_Radio_asingLogics, [_emisor,_radio_side,_radio_channel]];
+	}
+};
+
+//second pass recreate them
+uns_radio_FNC_asingLogicSecondPass={
+	private["_emisor","_radio_side","_radio_channel"];
+	{
+		_emisor=_x select 0;
+		_radio_side=_x select 1;
+		_radio_channel=_x select 2;
+		{
+			if (isnil {_x getvariable "uns_radio_assigned"}) exitwith {
+				[_x,_forEachIndex,_radio_side,_radio_channel] call uns_radio_FNC_recreatelogic;
+				[_x,_emisor] call Uns_radio_FNC_attachLogic;
+				_found=true;
+			};
+		} foreach uns_radio_Logics;
+	} foreach uns_Radio_asingLogics;
+};
+
+uns_radio_FNC_recreatelogic={
+	_logic= _this select 0;
+	_index= _this select 1;
+	_radio_side= _this select 2;
+	_radio_channel= _this select 3;
+	
+	if ((uns_radio_Logics select _index) != _logic) exitwith {diag_log["critical radio error 23"];};
+	
+	
+	_LocalLogic = "Logic" createVehicleLocal (getPos _logic);
+	_LocalLogic setvariable ["uns_radio_side",_radio_side];
+	_LocalLogic setvariable ["uns_radio_channel",_radio_channel];
+
+	if (!isnil {_logic getVariable "uns_radio_unitatt"}) then {
+		_unit=_logic getVariable "uns_radio_unitatt";
+		if (!isnil "_unit") then {
+			if (!isnull _unit) then {
+				[_LocalLogic,_unit] call Uns_radio_FNC_attachLogic;
+			};
+		};
+	};
+	
+	
+	deletevehicle _logic;
+	
+}
+
+uns_radio_FNC_recreateAllGroundlogics={
+	{
+		if (!isnil {_x getvariable ["uns_radio_channel"}) then {
+			if ((_x getvariable ["uns_radio_channel",-1])==0) then {
+				[_x , _forEachIndex,(_x getvariable ["uns_radio_side",-1]),(_x getvariable ["uns_radio_channel",-1])] call uns_radio_FNC_recreatelogic;
+			};
+		};
+	} foreach uns_radio_Logics;
+}
+
+uns_radio_FNC_createnewlogics={
+	if (isnil "uns_radio_Logics") then {uns_radio_Logics=[]};
+	
+	for "_x" from 1 to uns_radio_MaxSounds  do
+	{
+		_LocalLogic = "Logic" createVehicleLocal (getPos _logic);
+		uns_radio_Logics=uns_radio_Logics+[_LocalLogic];
+	};
+	
+}
 uns_radio_FNC_getRadioByType={
 	{
 		i
@@ -325,6 +541,7 @@ Uns_radio_FNC_ResetUnitEmiters = {
 		};
 	} foreach allunits;
 };
+
 Uns_radio_FNC_BuildEmisorList = {
 	//Plays a sound on all the sources near to the player on the chanel
 	private["_chanel", "_Soundindex", "_chanelSide","_SoundName","_eastTransG","_eastTransA",
@@ -468,36 +685,6 @@ uns_radio_FNC_Radio_Toggle_ONOFF = {
 	!_radioStatus;
 };
 
-Uns_radio_FNC_UnitRadioCheck = {
-	private["_unit", "_LocalLogic", "_inVehicle","_LastInVehicle"];
-	_unit=_this select 0;
-	_LocalLogic=_this select 1;
-	_inVehicle=(_unit != vehicle _unit);
-	_LastInVehicle=_inVehicle;
-	_LocalLogic attachTo [vehicle _unit,[0,0,0.5]];
-	
-	While {!isnull _unit && (_unit call uns_radio_FNC_HasRadio)} do {
-		_inVehicle=(_unit != vehicle _unit);
-		//Units goes into a vehicle, attach the logic to the vehicle
-		if (_inVehicle && !_LastInVehicle) then {
-			detach _LocalLogic;
-			_LocalLogic attachTo [(vehicle _unit),[0,0,0.5]];
-		};
-		
-		//Units goes out a vehicle, attach the logic to the unit
-		if (!_inVehicle && _LastInVehicle) then {
-			detach _LocalLogic;
-			_LocalLogic attachTo [_unit,[0,0,0.5]];
-		};		
-		_LastInVehicle=_inVehicle;
-		sleep 2;
-	};
-	deletevehicle _LocalLogic;
-	if (!isnull _unit) then {
-		_unit setVariable ["uns_radio_locLogic", nil];
-	};
-};
-
 
 uns_radio_ainRadioDialogLoad =
 {
@@ -607,4 +794,124 @@ uns_radio_FNC_Radio_Manual={
 	
 	uns_radio_manualShwon=not uns_radio_manualShwon;
 	call Uns_radio_FNC_GUI_Manual;
+};
+
+if (uns_radio_MaxSounds < 0) then {
+	Uns_radio_FNC_Play = {
+		//Plays a sound on all the sources near to the player on the chanel
+		private["_chanel", "_Soundindex", "_chanelSide","_SoundName","_SpecialSound"];
+		_chanel=_this select 0;
+		_chanelSide=_this select 1;
+		_Soundindex=_this select 2;
+		_SpecialSound=if (count _this > 3) then {_this select 3} else {false};
+		
+		
+		if (isDedicated) exitwith{}; // No sounds on dedi :)
+
+		if (_SpecialSound && _chanel==0) then {call Uns_radio_FNC_ResetUnitEmiters};
+		
+		if (time >Uns_radio_timeLastCheck) then {call Uns_radio_FNC_BuildEmisorList};
+		if (!_SpecialSound) then {
+			_SoundName=format["Uns_radio_%1_CHAN%2_TRACK%3",(Uns_radio_sides select _chanelSide),_chanel,_Soundindex];
+			(uns_radio_lastsounds select _chanelSide) set [_chanel,_Soundindex];
+		}else {
+			_SoundName=format["Uns_radio_%1_ANSWER_%2",(Uns_radio_sides select _chanelSide),(uns_radio_calltypes select _Soundindex)];
+		};
+		{if ((_x distance player) < Uns_radio_MaxDistance) then {_x say3d _SoundName}} foreach ((uns_radio_emisor select _chanelSide) select _chanel);
+		
+	};
+	Uns_radio_FNC_UnitRadioCheck = {
+		private["_unit", "_LocalLogic", "_inVehicle","_LastInVehicle"];
+		_unit=_this select 0;
+		_LocalLogic=_this select 1;
+		_inVehicle=(_unit != vehicle _unit);
+		_LastInVehicle=_inVehicle;
+		_LocalLogic attachTo [vehicle _unit,[0,0,0.5]];
+		
+		While {!isnull _unit && (_unit call uns_radio_FNC_HasRadio)} do {
+			_inVehicle=(_unit != vehicle _unit);
+			//Units goes into a vehicle, attach the logic to the vehicle
+			if (_inVehicle && !_LastInVehicle) then {
+				detach _LocalLogic;
+				_LocalLogic attachTo [(vehicle _unit),[0,0,0.5]];
+			};
+			
+			//Units goes out a vehicle, attach the logic to the unit
+			if (!_inVehicle && _LastInVehicle) then {
+				detach _LocalLogic;
+				_LocalLogic attachTo [_unit,[0,0,0.5]];
+			};		
+			_LastInVehicle=_inVehicle;
+			sleep 2;
+		};
+		deletevehicle _LocalLogic;
+		if (!isnull _unit) then {
+			_unit setVariable ["uns_radio_locLogic", nil];
+		};
+	};
+} else { 
+	//Alternate play version with limited number of radio sounds
+	Uns_radio_FNC_Play = {
+		//Plays a sound on all the sources near to the player on the chanel
+		private["_chanel", "_Soundindex", "_chanelSide","_SoundName","_SpecialSound"];
+		_chanel=_this select 0;
+		_chanelSide=_this select 1;
+		_Soundindex=_this select 2;
+		_SpecialSound=if (count _this > 3) then {_this select 3} else {false};
+		
+		
+		if (isDedicated) exitwith{}; // No sounds on dedi :)
+
+		if (_SpecialSound && _chanel==0) then {call uns_radio_FNC_recreateAllGroundlogics};
+		
+		if (time >Uns_radio_timeLastCheck) then {call Uns_radio_FNC_Update_logics};
+		if (!_SpecialSound) then {
+			_SoundName=format["Uns_radio_%1_CHAN%2_TRACK%3",(Uns_radio_sides select _chanelSide),_chanel,_Soundindex];
+			(uns_radio_lastsounds select _chanelSide) set [_chanel,_Soundindex];
+		}else {
+			_SoundName=format["Uns_radio_%1_ANSWER_%2",(Uns_radio_sides select _chanelSide),(uns_radio_calltypes select _Soundindex)];
+		};
+		
+		{
+			//if ((_x distance player) < Uns_radio_MaxDistance) then { //dist check shouldn't be needed
+			_x say3d _SoundName
+			//}; 
+		} foreach ((uns_radio_emisor select _chanelSide) select _chanel);
+		
+	};
+	
+	Uns_radio_FNC_UnitRadioCheck = {
+		private["_unit", "_LocalLogic", "_inVehicle","_LastInVehicle"];
+		_unit=_this select 0;
+		_LocalLogic=_this select 1;
+		if (!isnil {_unit getvariable "uns_radio_UnitRadioCheck"]}) exitwith{};
+		_inVehicle=(_unit != vehicle _unit);
+		_LastInVehicle=_inVehicle;
+		_LocalLogic attachTo [vehicle _unit,[0,0,0.5]];
+		
+		_unit setvariable ["uns_radio_UnitRadioCheck",true];
+		
+		While {!isnull _unit && (_unit call uns_radio_FNC_HasRadio) && !isnil "_LocalLogic"} do {
+			_inVehicle=(_unit != vehicle _unit);
+			//Units goes into a vehicle, attach the logic to the vehicle
+			if (_inVehicle && !_LastInVehicle) then {
+				detach _LocalLogic;
+				_LocalLogic attachTo [(vehicle _unit),[0,0,0.5]];
+			};
+			
+			//Units goes out a vehicle, attach the logic to the unit
+			if (!_inVehicle && _LastInVehicle) then {
+				detach _LocalLogic;
+				_LocalLogic attachTo [_unit,[0,0,0.5]];
+			};		
+			_LastInVehicle=_inVehicle;
+			sleep 2;
+			_LocalLogic=_unit getVariable "uns_radio_locLogic";
+		};
+
+
+		if (!isnil "_LocalLogic") then {(_unit getVariable "uns_radio_locLogic") call Uns_radio_FNC_unassigLogic;};
+		_unit setvariable ["uns_radio_UnitRadioCheck",nil];
+	};
+	call uns_radio_FNC_createnewlogics;
 };
