@@ -131,7 +131,7 @@ Uns_radio_FNC_Update_logics={
 	
 	Uns_radio_timeLastCheck=time+10;// only refresh this each 10 seconds and needed -->long loop :)
 	_list = (position player) nearEntities 150;
-
+	diag_log["update","list:",_list,time];
 	call Uns_radio_FNC_unassigAllLogics;
 
 	{
@@ -217,8 +217,10 @@ Uns_radio_FNC_Update_logics={
 
 	_params=[[_eastTransG,_eastTransA,_eastTransGE],[_westTransG,_westTransA,_westTransGE],[_resisTransG,_resisTransA,_resisTransGE],[_civTransG,_civTransA,_civTransGE]];
 	uns_radio_totalSources=[_totalSourcesGroud,_totalSourcesAir,_totalSourcesGeneric];
+	diag_log["update4","_params:",_params,time];
 	_params call Uns_radio_FNC_assingLogics;
 	uns_logics_updated=true;
+	diag_log["*-**logics**-*-",uns_radio_Logics,"*-*****-*-"];
 };
 
 Uns_radio_FNC_unassigLogic={
@@ -242,7 +244,7 @@ Uns_radio_FNC_attachLogic={
 	_logic= _this select 0;
 	_emisor= _this select 1;
 
-
+	diag_log["attaching",_this];
 	_emisor setvariable ["uns_radio_locLogic",_logic];
 	
 	if (_emisor isKindOf "CAManBase") then {[_emisor,_logic] spawn Uns_radio_FNC_UnitRadioCheck;};
@@ -271,20 +273,21 @@ uns_radio_fnc_addemisor= {
 	_logic= _this;
 	_radio_side = _logic getvariable "uns_radio_side";
 	_radio_channel = _logic getvariable "uns_radio_channel";
-
+	diag_log["add 1"];
 	if (!isnil "_radio_side" && !isnil "_radio_channel") then {
 		_tmparray1=uns_radio_emisor select _radio_side;
 		_tmparray2= (uns_radio_emisor select _radio_side) select _radio_channel;
 		_tmparray2= _tmparray2 + [_logic];
 		_tmparray1 set [_radio_channel, _tmparray2];
 		uns_radio_emisor set [_radio_side,_tmparray1];
+		diag_log["add 5",_tmparray1, "arr 2", _tmparray2,"uns_radio_emisor", uns_radio_emisor];
 	};
 };
 
 uns_radio_fnc_removeEmisor= {
 	private["_logic","_radio_side","_radio_channel"];
 	
-
+	diag_log["remove 1"];
 	_logic= _this;
 	_radio_side = _logic getvariable "uns_radio_side";
 	_radio_channel = _logic getvariable "uns_radio_channel";
@@ -292,9 +295,13 @@ uns_radio_fnc_removeEmisor= {
 	if (!isnil "_radio_side" && !isnil "_radio_channel") then {
 		_tmparray1=uns_radio_emisor select _radio_side;
 		_tmparray2= (uns_radio_emisor select _radio_side) select _radio_channel;
+		diag_log["remove 2",_tmparray1, "arr 2", _tmparray2];
 		_tmparray2= _tmparray2 - [_logic];
+		diag_log["remove 3",_tmparray1, "arr 2", _tmparray2];
 		_tmparray1 set [_radio_channel, _tmparray2];
+		diag_log["remove 4",_tmparray1, "arr 2", _tmparray2,"uns_radio_emisor", uns_radio_emisor];
 		uns_radio_emisor set [_radio_side,_tmparray1];
+		diag_log["remove 5",_tmparray1, "arr 2", _tmparray2,"uns_radio_emisor", uns_radio_emisor];
 	};
 };
 
@@ -311,7 +318,8 @@ Uns_radio_FNC_assingLogics={
 	_totalSourcesGeneric= uns_radio_totalSources select 2;
 	_totalSources=_totalSourcesGround+_totalSourcesAir+_totalSourcesGeneric;
 	
-
+	diag_log["assinglogics","radio",_totalRadios,_totalRadiosGround,_totalRadiosAir,_totalRadiosGeneric,"source",_totalSourcesGround,_totalSourcesAir,_totalSourcesGeneric,_totalSources, time];
+	
 	//TODO: shitty implementation needs clean up
 		//west:
 			//ground
@@ -342,6 +350,9 @@ Uns_radio_FNC_assingLogics={
 			//Generic
 			_civTransGE=(_this select 3) select 2;
 	
+	diag_log["assinglogics2",format["west: %1 %2 %3, east: %4 %5 %6, %7 %8 %9, %10 %11 %12",
+	_westTransG,_westTransA,_westTransGE,_eastTransG,_eastTransA,_eastTransGE,
+	_resisTransG,_resisTransA,_resisTransGE,_civTransG,_civTransA,_civTransGE]];
 	uns_Radio_asingLogics=[];
 	_lastTotalRadios=0;
 	//distribute all the max radio sounds throught the total sources.
@@ -455,9 +466,11 @@ Uns_radio_FNC_assingLogics={
 				_civTransGE=_civTransGE- [_emisor];
 			};
 		};
+		diag_log["assinglogics3", _totalSources, "t",_lastTotalRadios,_totalRadios, time];
 	};
-
+	diag_log["assinglogics3",time];
 	call uns_radio_FNC_asingLogicSecondPass;
+	diag_log["assinglogics5",time];
 };
 
 //first pass, reuse old logics
@@ -468,14 +481,14 @@ uns_radio_FNC_asingLogicFirstPass={
 	_radio_channel=_this select 2;
 	_found=false;
 	
-
+	diag_log["firstpass1"];
 	{
 		if (isnil {_x getvariable "uns_radio_assigned"} && _radio_side==(_x getvariable ["uns_radio_side",-1]) && _radio_channel==(_x getvariable ["uns_radio_channel",-1]) ) exitwith {
 			[_x,_emisor] call Uns_radio_FNC_attachLogic;
 			_found=true;
 		};
 	} foreach uns_radio_Logics;
-
+	diag_log["firstpass2"];
 	if (!_found) then {
 		uns_Radio_asingLogics set [count uns_Radio_asingLogics, [_emisor,_radio_side,_radio_channel]];
 	}
@@ -485,7 +498,7 @@ uns_radio_FNC_asingLogicFirstPass={
 uns_radio_FNC_asingLogicSecondPass={
 	private["_emisor","_radio_side","_radio_channel","_logic"];
 	
-
+	diag_log["second pass"];
 	{
 		_emisor=_x select 0;
 		_radio_side=_x select 1;
@@ -497,12 +510,15 @@ uns_radio_FNC_asingLogicSecondPass={
 				[_x,_forEachIndex,_radio_side,_radio_channel] call uns_radio_FNC_recreatelogic;
 				_found=true;
 			};
+			diag_log["second pass1"];
 		} foreach uns_radio_Logics;
 		if (!_found) then {
 			_logic =[_radio_side,_radio_channel] call uns_radio_FNC_createlogic;
 		};	
 		[_logic,_emisor] call Uns_radio_FNC_attachLogic;
+		diag_log["second pass2"];
 	} foreach uns_Radio_asingLogics;
+	diag_log["second pass3"];
 };
 
 uns_radio_FNC_recreatelogic={
@@ -512,7 +528,7 @@ uns_radio_FNC_recreatelogic={
 	_radio_side= _this select 2;
 	_radio_channel= _this select 3;
 	
-
+	diag_log["recreating", _this];
 	if (!isnull _logic && ((uns_radio_Logics select _index) != _logic)) exitwith {diag_log["critical radio error 23"];};
 	
 	_unit=_logic getVariable "uns_radio_unitatt";
@@ -530,6 +546,8 @@ uns_radio_FNC_recreatelogic={
 			[_LocalLogic,_unit] call Uns_radio_FNC_attachLogic;
 		};
 	};
+	
+	diag_log["recreating", _LocalLogic,_logic, "-params-", _this];
 	
 };
 
@@ -549,7 +567,7 @@ uns_radio_FNC_createlogic={ //creates logics 1 by 1
 	_radio_side=_this select 0;
 	_radio_channel=_this select 1;
 	
-
+	diag_log["create",_radio_side,_radio_channel];
 	_LocalLogic = "Logic" createVehicleLocal [-1000,-1000,0];
 	if (!isnull _LocalLogic) then {
 		uns_radio_Logics=uns_radio_Logics+[_LocalLogic];
@@ -897,14 +915,14 @@ if (uns_radio_MaxSounds < 0) then {
 		_Soundindex=_this select 2;
 		_SpecialSound=if (count _this > 3) then {_this select 3} else {false};
 		
-
+		diag_log["==============================play==================================", _this];
 		if (isDedicated) exitwith{}; // No sounds on dedi :)
-
-		if (_SpecialSound && _chanel==0) then {call uns_radio_FNC_recreateAllGroundlogics}; //special msg delete all logics and recreate to reset the sound
-
+		diag_log["play1", time,"==============", _this];
+		if (_SpecialSound && _chanel==0) then {call uns_radio_FNC_recreateAllGroundlogics};
+		diag_log["play2", format["lastcheck %1",Uns_radio_timeLastCheck],time,"==============", _this];
 		if (time >Uns_radio_timeLastCheck) then {call Uns_radio_FNC_Update_logics};
 		waituntil{uns_logics_updated};
-
+		diag_log["play3", time,"==============", _this];
 		if (!_SpecialSound) then {
 			_SoundName=format["Uns_radio_%1_CHAN%2_TRACK%3",(Uns_radio_sides select _chanelSide),_chanel,_Soundindex];
 			(uns_radio_lastsounds select _chanelSide) set [_chanel,_Soundindex];
@@ -912,12 +930,13 @@ if (uns_radio_MaxSounds < 0) then {
 			_SoundName=format["Uns_radio_%1_ANSWER_%2",(Uns_radio_sides select _chanelSide),(uns_radio_calltypes select _Soundindex)];
 		};
 		
-
+		diag_log["play4", time,"==============", _this];
 		{
 			//if ((_x distance player) < Uns_radio_MaxDistance) then { //dist check shouldn't be needed
 			_x say3d _SoundName
 			//}; 
 		} foreach ((uns_radio_emisor select _chanelSide) select _chanel);
+		diag_log["play5", time,"==============", _this,"=========",uns_radio_emisor];
 		
 	};
 	
@@ -926,7 +945,7 @@ if (uns_radio_MaxSounds < 0) then {
 		_unit=_this select 0;
 		_LocalLogic=_this select 1;
 		
-
+		diag_log["Uns_radio_FNC_UnitRadioCheck",_this];
 		if (!isnil {_unit getvariable "uns_radio_UnitRadioCheck"}) exitwith{};
 		_unit setvariable ["uns_radio_UnitRadioCheck",true];
 		if (isnil "_LocalLogic") then {_LocalLogic=(_unit getVariable "uns_radio_locLogic")};
@@ -936,6 +955,7 @@ if (uns_radio_MaxSounds < 0) then {
 		_LocalLogic attachTo [vehicle _unit,[0,0,0.5]];
 	
 		
+		diag_log["Uns_radio_FNC_UnitRadioCheck  continue",_this];
 		While {!isnull _unit && (_unit call uns_radio_FNC_HasRadio) && !isnil "_LocalLogic"} do {
 			_inVehicle=(_unit != vehicle _unit);
 			//Units goes into a vehicle, attach the logic to the vehicle
@@ -954,6 +974,7 @@ if (uns_radio_MaxSounds < 0) then {
 			_LocalLogic=_unit getVariable "uns_radio_locLogic";
 		};
 
+		diag_log["Uns_radio_FNC_UnitRadioCheck  ****FIn****",_this];
 		if (!isnil "_LocalLogic") then {(_unit getVariable "uns_radio_locLogic") call Uns_radio_FNC_unassigLogic;};
 		_unit setvariable ["uns_radio_UnitRadioCheck",nil];
 	};
