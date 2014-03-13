@@ -29,31 +29,30 @@ class uns_radio
 			ground=5; //max number of simultaneus ground radio playing
 			air=5; //max number of simultaneus air radio playing
 			generic=3; //max number of simultaneus generic radio playing
-		}
+		};
 		
 		class NumSounds{ //number of sounds of each class
 			class EAST {
 				ground=48; //east ground channel
 				air=0;
 				generic=0;
-			}
+			};
 			class WEST {
 				ground=17; 	//west ground channel
 				air=14;		//west air channel
 				generic=85; //west generic radio channel
-			}
+			};
 			class RESISTANCE {
 				ground=0;
 				air=0;
 				generic=0;
-			}
+			};
 			class CIVILIAN {
 				ground=0;
 				air=0;
 				generic=0;
-			}
+			};
 		};
-		
 	};
 };
 
