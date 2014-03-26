@@ -91,6 +91,7 @@ Uns_radio_FNC_RadioCallAndANS = {
 	_callTrack= format ["Uns_radio_%1_CALL_%2",(Uns_radio_sides select _side),(uns_radio_calltypes select _callType)];
 	_duracion = getnumber(ConfigFile >> "CfgSounds" >>_callTrack>>"duration");
 	[_caller, _callTrack] call CBA_fnc_globalSay3d;
+	diag_log["golbal say3d 1 ", time,"==============", _SoundName,"=========",_this];
 	
 	sleep (_duracion + (random 4));
 	_callTrack= format ["Uns_radio_%1_ANSWER_%2",(Uns_radio_sides select _side),(uns_radio_calltypes select _callType)];
@@ -116,7 +117,7 @@ Uns_radio_FNC_getSideNum = {
 };
 
 Uns_radio_FNC_Update_logics={
-	private["_list","_chanel", "_Soundindex", "_chanelSide","_SoundName","_eastTransG","_eastTransA",
+	private["_list","_chanel", "_Soundindex", "_chanelSide","_eastTransG","_eastTransA",
 	"_westTransG","_westTransA","_resisTransG","_resisTransA","_civTransG","_civTransA","_sideR",
 	"_eastTransGE","_westTransGE","_resisTransGE","_civTransGE","_LocalLogic"];
 	_totalSourcesGroud=0;
@@ -130,7 +131,8 @@ Uns_radio_FNC_Update_logics={
 	_resisTransG=[];_civTransG=[]; _resisTransA=[];_civTransA=[]; _resisTransGE=[];_civTransGE=[];
 	
 	Uns_radio_timeLastCheck=time+10;// only refresh this each 10 seconds and needed -->long loop :)
-	_list = (position player) nearEntities 150;
+	//_list = (position player) nearEntities 150; // better performance but not ordered by distance
+	_list= nearestObjects [player, ["Car","Man","Air","uns_transitor"], 150]; // bit more perf intensive but returns the list ordered and filtered
 	diag_log["update","list:",_list,time];
 	call Uns_radio_FNC_unassigAllLogics;
 
@@ -195,23 +197,24 @@ Uns_radio_FNC_Update_logics={
 
 	
 		//Generic objects with radio. TODO no need to constant check
-	
-		if (isNumber (configFile>>"CfgVehicles" >> typeOf _x >> "Uns_has_Radio")) then
-		{
-			_sideR=Uns_radio_sides select (getNumber (configFile>>"CfgVehicles" >> typeOf _x >> "Uns_has_Radio"));
-		} else{
-			//_sideR=getNumber (configFile>>"CfgVehicles" >> typeOf _vehicle >> "Uns_has_Radio") // read from config
-			_sideR=sideEnemy; //Not recogniced 
-		};
-		
-		switch _sideR do {
-			case west : {_westTransGE=_westTransGE+[_x]};
-			case east : {_eastTransGE=_eastTransGE+[_x]};
-			case Resistance : {_resisTransGE=_resisTransGE+[_x]};
-			case Civilian : {_civTransGE=_civTransGE+[_x]};
-			default {};                          
+		if (_x isKindOf "uns_transitor") then {
+			if (isNumber (configFile>>"CfgVehicles" >> typeOf _x >> "Uns_has_Radio")) then
+			{
+				_sideR=Uns_radio_sides select (getNumber (configFile>>"CfgVehicles" >> typeOf _x >> "Uns_has_Radio"));
+			} else{
+				//_sideR=getNumber (configFile>>"CfgVehicles" >> typeOf _vehicle >> "Uns_has_Radio") // read from config
+				_sideR=sideEnemy; //Not recogniced 
+			};
+			
+			switch _sideR do {
+				case west : {_westTransGE=_westTransGE+[_x]};
+				case east : {_eastTransGE=_eastTransGE+[_x]};
+				case Resistance : {_resisTransGE=_resisTransGE+[_x]};
+				case Civilian : {_civTransGE=_civTransGE+[_x]};
+				default {};                          
+			};	
+			_totalSourcesGeneric=_totalSourcesGeneric+1;
 		};	
-		_totalSourcesGeneric=_totalSourcesGeneric+1;
 	} foreach _list;
 	
 
@@ -247,21 +250,22 @@ Uns_radio_FNC_attachLogic={
 	diag_log["attaching",_this];
 	_emisor setvariable ["uns_radio_locLogic",_logic];
 	
-	if (_emisor isKindOf "CAManBase") then {[_emisor,_logic] spawn Uns_radio_FNC_UnitRadioCheck;};
-	
 	_logic setvariable ["uns_radio_unitatt",_emisor];
 
-	
 	_logic setvariable ["uns_radio_assigned",true];
+	detach _logic;
 	_logic attachTo [vehicle _emisor,[0,0,0.5]];
+	
+	if (_emisor isKindOf "CAManBase") then {[_emisor,_logic] spawn Uns_radio_FNC_UnitRadioCheck;};
 	
 	_logic call uns_radio_fnc_addemisor;
 	
 };
 
 Uns_radio_FNC_unassigAllLogics={
+	//only sets _logic setvariable ["uns_radio_assigned",nil]; not fulle unassing
 	{
-		_x call Uns_radio_FNC_unassigLogic;
+		_x setvariable ["uns_radio_assigned",nil];
 	} foreach uns_radio_Logics;
 };
 
@@ -475,19 +479,29 @@ Uns_radio_FNC_assingLogics={
 
 //first pass, reuse old logics
 uns_radio_FNC_asingLogicFirstPass={
-	private["_emisor","_radio_side","_radio_channel","_found"];
+	private["_emisor","_radio_side","_radio_channel","_found","_logic"];
 	_emisor=_this select 0;
 	_radio_side=_this select 1;
 	_radio_channel=_this select 2;
 	_found=false;
 	
+	
+	_logic=_emisor getVariable "uns_radio_locLogic";
+	
+	if (!isnil "_logic" ) then { //aldready had a logic
+		[_logic,_emisor] call Uns_radio_FNC_attachLogic;
+		_found=true;
+	} else { //no logic, first look for an existent one: // moved to second pass
+		/*
+		{
+			if (isnil {_x getvariable "uns_radio_assigned"} && _radio_side==(_x getvariable ["uns_radio_side",-1]) && _radio_channel==(_x getvariable ["uns_radio_channel",-1]) ) exitwith {
+				[_x,_emisor] call Uns_radio_FNC_attachLogic;
+				_found=true;
+			};
+		} foreach uns_radio_Logics;*/
+	};
 	diag_log["firstpass1"];
-	{
-		if (isnil {_x getvariable "uns_radio_assigned"} && _radio_side==(_x getvariable ["uns_radio_side",-1]) && _radio_channel==(_x getvariable ["uns_radio_channel",-1]) ) exitwith {
-			[_x,_emisor] call Uns_radio_FNC_attachLogic;
-			_found=true;
-		};
-	} foreach uns_radio_Logics;
+	
 	diag_log["firstpass2"];
 	if (!_found) then {
 		uns_Radio_asingLogics set [count uns_Radio_asingLogics, [_emisor,_radio_side,_radio_channel]];
@@ -504,14 +518,26 @@ uns_radio_FNC_asingLogicSecondPass={
 		_radio_side=_x select 1;
 		_radio_channel=_x select 2;
 		_found=false;
-		{
-			if (isnil {_x getvariable "uns_radio_assigned"}) exitwith {
-				_logic=_x;
-				[_x,_forEachIndex,_radio_side,_radio_channel] call uns_radio_FNC_recreatelogic;
+		
+		{ // first try to look for an exiting one already on that channel
+			if (isnil {_x getvariable "uns_radio_assigned"} && _radio_side==(_x getvariable ["uns_radio_side",-1]) && _radio_channel==(_x getvariable ["uns_radio_channel",-1]) ) exitwith {
+				_x call Uns_radio_FNC_unassigLogic;
+				[_x,_emisor] call Uns_radio_FNC_attachLogic;
 				_found=true;
 			};
-			diag_log["second pass1"];
 		} foreach uns_radio_Logics;
+		
+		if (!_found) then { //find any logic on any channel that isn't used yet
+			{
+				if (isnil {_x getvariable "uns_radio_assigned"}) exitwith {
+					_logic=_x;
+					[_x,_forEachIndex,_radio_side,_radio_channel] call uns_radio_FNC_recreatelogic; //recreate to reset the sound
+					_found=true;
+				};
+				diag_log["second pass1"];
+			} foreach uns_radio_Logics;
+		};
+		
 		if (!_found) then {
 			_logic =[_radio_side,_radio_channel] call uns_radio_FNC_createlogic;
 		};	
@@ -551,15 +577,18 @@ uns_radio_FNC_recreatelogic={
 	
 };
 
-uns_radio_FNC_recreateAllGroundlogics={
+uns_radio_FNC_recreateAllchanelLogics={
+	_chanel = _this select 0;
+	_side= _this select 1;
 	{
-		if (!isnil {_x getvariable "uns_radio_channel"}) then {
-			if ((_x getvariable ["uns_radio_channel",-1])==0) then {
-				[_x , _forEachIndex,(_x getvariable ["uns_radio_side",-1]),(_x getvariable ["uns_radio_channel",-1])] call uns_radio_FNC_recreatelogic;
+		if (!isnil {_x getvariable "uns_radio_channel"} && !isnil {_x getvariable "uns_radio_side"}) then {
+			if ((_x getvariable ["uns_radio_channel",-1])==_chanel && (_x getvariable ["uns_radio_side",-1])== _side) then {
+				[_x , _forEachIndex,_side,_chanel] call uns_radio_FNC_recreatelogic;
 			};
 		};
 	} foreach uns_radio_Logics;
 };
+
 
 
 uns_radio_FNC_createlogic={ //creates logics 1 by 1
@@ -918,9 +947,13 @@ if (uns_radio_MaxSounds < 0) then {
 		diag_log["==============================play==================================", _this];
 		if (isDedicated) exitwith{}; // No sounds on dedi :)
 		diag_log["play1", time,"==============", _this];
-		if (_SpecialSound && _chanel==0) then {call uns_radio_FNC_recreateAllGroundlogics};
+		
 		diag_log["play2", format["lastcheck %1",Uns_radio_timeLastCheck],time,"==============", _this];
-		if (time >Uns_radio_timeLastCheck) then {call Uns_radio_FNC_Update_logics};
+		if (_SpecialSound && _chanel==0) then {[_chanel, _chanelSide] call uns_radio_FNC_recreateAllchanelLogics;};
+		if (time >Uns_radio_timeLastCheck) then {
+			[_chanel, _chanelSide] call uns_radio_FNC_recreateAllchanelLogics; //stop all the radios on that side/channel. TODO: Do it always? maybe to resource intensive
+			call Uns_radio_FNC_Update_logics; //uptade nearst radio source positions
+		};
 		waituntil{uns_logics_updated};
 		diag_log["play3", time,"==============", _this];
 		if (!_SpecialSound) then {
@@ -933,7 +966,8 @@ if (uns_radio_MaxSounds < 0) then {
 		diag_log["play4", time,"==============", _this];
 		{
 			//if ((_x distance player) < Uns_radio_MaxDistance) then { //dist check shouldn't be needed
-			_x say3d _SoundName
+			_x say3d _SoundName;
+			diag_log["sound playing ", time,"==============", _SoundName ,"=========",_this];
 			//}; 
 		} foreach ((uns_radio_emisor select _chanelSide) select _chanel);
 		diag_log["play5", time,"==============", _this,"=========",uns_radio_emisor];
@@ -946,7 +980,7 @@ if (uns_radio_MaxSounds < 0) then {
 		_LocalLogic=_this select 1;
 		
 		diag_log["Uns_radio_FNC_UnitRadioCheck",_this];
-		if (!isnil {_unit getvariable "uns_radio_UnitRadioCheck"}) exitwith{};
+		if (!isnil {_unit getvariable "uns_radio_UnitRadioCheck"}) exitwith{diag_log["Uns_radio_FNC_UnitRadioCheck already in \/ EXIT",_this];};
 		_unit setvariable ["uns_radio_UnitRadioCheck",true];
 		if (isnil "_LocalLogic") then {_LocalLogic=(_unit getVariable "uns_radio_locLogic")};
 		
